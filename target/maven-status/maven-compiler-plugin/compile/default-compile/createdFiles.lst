@@ -1,0 +1,9 @@
+com\chatapp\ChatClientController.class
+com\chatapp\LoginController.class
+com\chatapp\ClientHandler.class
+com\chatapp\ClientLoginController.class
+com\chatapp\Client.class
+com\chatapp\ClientLoginUI.class
+com\chatapp\Server.class
+com\chatapp\LoginApp.class
+com\chatapp\SignupController.class
