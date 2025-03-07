@@ -12,7 +12,9 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 
-import java.io.IOException;
+import org.json.JSONObject;
+import java.io.*;
+import java.net.Socket;
 
 /**
  * Controller for the client login interface
@@ -30,6 +32,9 @@ public class ClientLoginController {
 
     @FXML
     private Label messageLabel;
+    
+    private static final String SERVER_HOST = "localhost";
+    private static final int SERVER_PORT = 1234;
 
     @FXML
     public void initialize() {
@@ -45,6 +50,7 @@ public class ClientLoginController {
         // Validate input
         if (email.isEmpty() || password.isEmpty()) {
             messageLabel.setText("Please enter both email and password");
+            messageLabel.getStyleClass().clear();
             messageLabel.getStyleClass().add("error-message");
             return;
         }
@@ -52,59 +58,86 @@ public class ClientLoginController {
         // Basic email validation
         if (!email.contains("@") || !email.contains(".")) {
             messageLabel.setText("Please enter a valid email");
+            messageLabel.getStyleClass().clear();
             messageLabel.getStyleClass().add("error-message");
             return;
         }
 
-        // For now, we'll use a simple check - in a real app, you would verify against a
-        // server
-        if ((email.equals("admin@example.com") && password.equals("admin123")) ||
-                (email.equals("user@example.com") && password.equals("user123"))) {
-
-            // Extract username from email (part before @)
-            String username = email.substring(0, email.indexOf("@"));
-
-            messageLabel.setText("Login successful! Connecting...");
-            messageLabel.getStyleClass().clear();
-            messageLabel.getStyleClass().add("success-message");
-
-            // Launch chat client UI instead of console client
+        messageLabel.setText("Connecting to server...");
+        messageLabel.getStyleClass().clear();
+        messageLabel.getStyleClass().add("success-message");
+        
+        // Connect to server in a new thread
+        new Thread(() -> {
             try {
-                launchChatClientUI(username);
+                Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
+                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                
+                // Send JSON authentication credentials
+                JSONObject loginRequest = new JSONObject();
+                loginRequest.put("email", email);
+                loginRequest.put("password", password);
+                out.println(loginRequest.toString());
+                
+                // Get authentication response
+                String response = in.readLine();
+                
+                if ("AUTH_SUCCESS".equals(response)) {
+                    // Extract username from email (part before @)
+                    String username = email.substring(0, email.indexOf("@"));
+                    
+                    // Update UI on JavaFX thread
+                    Platform.runLater(() -> {
+                        messageLabel.setText("Authentication successful!");
+                        messageLabel.getStyleClass().clear();
+                        messageLabel.getStyleClass().add("success-message");
+                        
+                        try {
+                            launchChatUI(email, socket, in, out);
+                        } catch (Exception e) {
+                            messageLabel.setText("Error launching chat: " + e.getMessage());
+                            messageLabel.getStyleClass().clear();
+                            messageLabel.getStyleClass().add("error-message");
+                        }
+                    });
+                } else {
+                    // Show failure message on JavaFX thread
+                    Platform.runLater(() -> {
+                        messageLabel.setText("Authentication failed: " + response);
+                        messageLabel.getStyleClass().clear();
+                        messageLabel.getStyleClass().add("error-message");
+                    });
+                    socket.close();
+                }
             } catch (Exception e) {
-                e.printStackTrace();
-                messageLabel.setText("Connection error: " + e.getMessage());
-                messageLabel.getStyleClass().clear();
-                messageLabel.getStyleClass().add("error-message");
+                Platform.runLater(() -> {
+                    messageLabel.setText("Connection error: " + e.getMessage());
+                    messageLabel.getStyleClass().clear();
+                    messageLabel.getStyleClass().add("error-message");
+                });
             }
-        } else {
-            messageLabel.setText("Invalid email or password");
-            messageLabel.getStyleClass().clear();
-            messageLabel.getStyleClass().add("error-message");
-        }
+        }).start();
     }
-
-    private void launchChatClientUI(String username) throws IOException {
+    
+    private void launchChatUI(String email, Socket socket, BufferedReader in, PrintWriter out) throws IOException {
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/chatapp/chatClient.fxml"));
         Parent chatView = loader.load();
-
-        // Get the controller and initialize it with the username
+        
+        // Get controller and initialize it with connection details
         ChatClientController controller = loader.getController();
-        controller.initData(username);
-
+        controller.initChatSession(email, socket, in, out);
+        
         // Create new scene
         Scene chatScene = new Scene(chatView, 600, 400);
-
-        // Get current stage
-        Stage stage = (Stage) connectButton.getScene().getWindow();
-
-        // Configure and show the chat UI
-        stage.setTitle("Chat Client - " + username);
-        stage.setScene(chatScene);
-        stage.setResizable(true);
-        stage.show();
-
-        // Connect to server
-        controller.connectToServer();
+        
+        // Get current stage and set new scene
+        Platform.runLater(() -> {
+            Stage stage = (Stage) connectButton.getScene().getWindow();
+            stage.setTitle("Chat Client - " + email);
+            stage.setScene(chatScene);
+            stage.setResizable(true);
+            stage.show();
+        });
     }
 }
