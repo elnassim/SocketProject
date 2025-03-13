@@ -6,6 +6,7 @@ com\chatapp\User.class
 com\chatapp\ChatClientController.class
 com\chatapp\LoginController.class
 com\chatapp\ClientHandler.class
+com\chatapp\ChatClientController$MessageData.class
 com\chatapp\ClientLoginUI.class
 com\chatapp\Server.class
 com\chatapp\SignupController.class
